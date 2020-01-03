@@ -113,10 +113,6 @@ class SpriteRegistry:
 
     def revive_sprite(self, sprite):
         sprite.alive = True
-        if not sprite is self._sprite_by_id[sprite.id]:
-            logging.debug('Unknown sprite %s (id=%s)', sprite, id(sprite))
-        # if sprite not in self._dead_sprites_by_key[sprite.key]:
-        #     import ipdb; ipdb.set_trace()
         self._dead_sprites_by_key[sprite.key].remove(sprite)
         self._live_sprites_by_key[sprite.key].append(sprite)
 
@@ -240,7 +236,6 @@ class SpriteRegistry:
         assert set(self.sprite_keys).issuperset(state.keys()), \
             'Known sprite keys should match'
 
-        # Is assumed to not hold any Immutables
         other_ids = {sprite['id'] for sprites in state.values() for sprite in sprites}
         # Do not consider Immutables, and expect that they were not saved.
         known_ids = {id for id, sprite in self._sprite_by_id.items() \
@@ -248,53 +243,33 @@ class SpriteRegistry:
         deleted_ids = known_ids.difference(other_ids)
         added_ids = other_ids.difference(known_ids)
 
-        for known_id in known_ids:
-            self.destroy_sprite(self._sprite_by_id[known_id])
+        if len(deleted_ids) > 0:
+            for key in self.sprite_keys:
+                self._live_sprites_by_key[key] = [sprite for sprite in self._live_sprites_by_key[key] \
+                                                  if not sprite.id in deleted_ids]
+                self._dead_sprites_by_key[key] = [sprite for sprite in self._dead_sprites_by_key[key] \
+                                                  if not sprite.id in deleted_ids]
+            for deleted_id in deleted_ids:
+                self._sprite_by_id.pop(deleted_id)
 
-        for key, sprites in state.items():
-            for sprite_state in sprites:
-                self.reinstate_sprite(key, sprite_state)
+        if len(added_ids) > 0:
+            pass
 
-        # TODO reinstate smarter state keeping
-        # if len(deleted_ids) > 0:
-        #     for key in self.sprite_keys:
-        #         self._live_sprites_by_key[key] = [sprite for sprite in self._live_sprites_by_key[key] \
-        #                                           if not sprite.id in deleted_ids]
-        #         self._dead_sprites_by_key[key] = [sprite for sprite in self._dead_sprites_by_key[key] \
-        #                                           if not sprite.id in deleted_ids]
-        #     for deleted_id in deleted_ids:
-        #         self._sprite_by_id.pop(deleted_id)
-
-        # if len(added_ids) > 0:
-        #     pass
-
-        # for key, sprite_states in state.items():
-        #     for sprite_state in sprite_states:
-        #         id = sprite_state['id']
-        #         if id in self._sprite_by_id:
-        #             sprite = self._sprite_by_id[id]
-        #             known_alive = sprite.alive
-        #             if not known_alive and sprite not in self._dead_sprites_by_key[sprite.key]:
-        #                 import ipdb; ipdb.set_trace()
-        #             sprite.set_game_state(sprite_state['state'])
-        #             if known_alive and not sprite.alive:
-        #                 self.kill_sprite(sprite)
-        #             elif not known_alive and sprite.alive:
-        #                 self.revive_sprite(sprite)
-        #         else:
-        #             # Including pos here because I don't like allowing position-less sprites
-        #             sprite = self.create_sprite(key, id, pos=sprite_state['state']['rect'].topleft)
-        #             sprite.set_game_state(sprite_state['state'])
-
-    def reinstate_sprite(self, key, sprite_state: 'SpriteState'):
-        """
-        Reinserts a sprite that may come from a saved state.
-        """
-        sprite = self.create_sprite(key, sprite_state['id'],
-                                    pos=sprite_state['state']['rect'].topleft)
-        sprite.set_game_state(sprite_state['state'])
-        if not sprite.alive:
-            self.kill_sprite(sprite)
+        for key, sprite_states in state.items():
+            for sprite_state in sprite_states:
+                id = sprite_state['id']
+                if id in self._sprite_by_id:
+                    sprite = self._sprite_by_id[id]
+                    known_alive = sprite.alive
+                    sprite.set_game_state(sprite_state['state'])
+                    if known_alive and not sprite.alive:
+                        self.kill_sprite(sprite)
+                    elif not known_alive and sprite.alive:
+                        self.revive_sprite(sprite)
+                else:
+                    # Including pos here because I don't like allowing position-less sprites
+                    sprite = self.create_sprite(key, id, pos=sprite_state['state']['rect'].topleft)
+                    sprite.set_game_state(sprite_state['state'])
 
     def assert_sanity(self):
         live = set(s.id for ss in self._live_sprites_by_key.values() for s in ss)
@@ -365,9 +340,6 @@ class GameState(UserDict):
     def ended(self):
         return self.data['ended']
 
-    def get_reward(self):
-        return self.data['last_reward']
-
     def freeze(self):
         # Return cached frozen game state, since game states don't change
         if self.frozen is not None:
@@ -391,7 +363,6 @@ class GameState(UserDict):
     def __eq__(self, other):
         """ Game state equality, should ignore time etc """
         # return self.freeze() == other.freeze()
-        if other is None: return False
         return self.hash() == other.hash()
 
     def __hash__(self):
@@ -742,16 +713,11 @@ class BasicGameLevel:
             return self.last_state
 
         state_dict = {
+            'score': self.score,
             'last_reward': self.last_reward,
-            'sprites': self.sprite_registry.get_state(),
-            # Should not be considered for Markov state equality, but can be used
-            # by a non-Markov StateObserver. Careful, that means S -> O is no
-            # longer a function mathematically, as S1 == S2, but both give
-            # rise to different O1, O2
-            'kill_list': self.kill_list,
             'time': self.time,
             'ended': self.ended,
-            'score': self.score,
+            'sprites': self.sprite_registry.get_state(),
         }
 
         state = GameState(self, state_dict)
@@ -792,7 +758,8 @@ class BasicGameLevel:
             if g2 == "EOS":
                 ss1 = ss[g1]
                 for s1 in ss1:
-                    if not self.contains_rect(s1.rect):
+                    game_rect = pygame.Rect((0, 0), self.screensize)
+                    if not game_rect.contains(s1.rect):
                         try:
                             self.add_score(effect.score)
                             effect(s1, None, self)
@@ -805,7 +772,8 @@ class BasicGameLevel:
             # special case for any tile, as long as it's in the game window still
             if g2 == "ANY":
                 for s1 in self.lastcollisions[g1]:
-                    if not self.contains_rect(s1.rect):
+                    game_rect = pygame.Rect((0, 0), self.screensize)
+                    if not game_rect.contains(s1.rect):
                         continue
                     try:
                         self.add_score(effect.score)
@@ -845,7 +813,7 @@ class BasicGameLevel:
         self.score += score
         self.last_reward += score
 
-    def get_possible_actions(self, include_noop=True) -> Dict[Tuple[int], Action]:
+    def get_possible_actions(self) -> Dict[Tuple[int], Action]:
         """
         Assume actions don't change
 
@@ -861,11 +829,11 @@ class BasicGameLevel:
             raise Exception('No avatar class registered')
 
         # Alternatively, use pygame names for keys instead of the key codes
-        # pygame_keys = {k: v for k, v in vars(pygame).items() if k.startswith('K_')}
+        pygame_keys = {k: v for k, v in vars(pygame).items() if k.startswith('K_')}
         action_dict = avatar_cls.declare_possible_actions()
-        return {a.keys: a for a in action_dict.values() if include_noop or a != ACTION.NOOP}
+        return {a.keys: a for a in action_dict.values()}
 
-    def tick(self, action: Union[Action, int]):
+    def tick(self, avatar_action: Union[Action, int], angry_action=None):
         """
         Actions are currently communicated to the rest of the program
         through game.keystate, which mimics pygame.key.get_pressed().
@@ -874,12 +842,12 @@ class BasicGameLevel:
         games that are human playable. Key presses are easy to reason about,
         even if we do not actually use them.
         """
-        if isinstance(action, int):
-            action = Action(action)
-        assert action in self.get_possible_actions().values(), \
-            'Illegal action %s, expected one of %s' % (action, self.get_possible_actions())
-        if isinstance(action, int):
-            action = Action(action)
+        if isinstance(avatar_action, int):
+            avatar_action = Action(avatar_action)
+        assert avatar_action in self.get_possible_actions().values(), \
+            'Illegal action %s, expected one of %s' % (avatar_action, self.get_possible_actions())
+        if isinstance(avatar_action, int):
+            avatar_action = Action(avatar_action)
 
         # This is required for game-updates to work properly
         self.time += 1
@@ -894,7 +862,7 @@ class BasicGameLevel:
         # Update Keypresses
         # Agents are updated during the update routine in their ontology files,
         # this depends on BasicGame.active_keys
-        self.active_keys = action.keys
+        self.active_keys = avatar_action.keys
 
         # Clear last turn's kill list, used by the renderer to clear sprites
         # Things can die during update and subsequent _eventHandling,
@@ -912,7 +880,11 @@ class BasicGameLevel:
         # While loop because it can keep growing, for loops are fickle
         while self.update_queue:
             s = self.update_queue.popleft()
-            s.update(self)
+
+            if angry_action and s.key == 'angry':
+                s.update(self, angry_action)
+            else:
+                s.update(self)
 
         # Handle Collision Effects
         self._event_handling()
@@ -949,27 +921,8 @@ class BasicGameLevel:
             sprites = self.sprite_registry.sprites()
 
         for other in sprites:
-            if other.rect.topleft == topleft:
+            if sprite.rect.topleft == topleft:
                 yield other
-
-    def contains_rect(self, rect: pygame.Rect):
-        game_rect = pygame.Rect((0, 0), self.screensize)
-        return game_rect.contains(rect)
-
-    def contains_position(self, pos: Union[Tuple, Vector2]):
-        """
-        Checks if a standard rectangle at that position is in the game screen.
-        So rectangles half falling off the screen are considered not to be contained.
-        """
-        rect = pygame.Rect(pos, (self.block_size, self.block_size))
-        return self.contains_rect(rect)
-
-    def is_freshly_killed(self, stype: str) -> bool:
-        """
-        Mind you, this is non-Markov and is not fully tested yet,
-        as it relies on `self.kill_list`.
-        """
-        return bool(set(self.kill_list).intersection(self.sprite_registry.with_stype(stype, include_dead=True)))
 
 
 class VGDLSprite:

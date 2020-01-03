@@ -39,36 +39,30 @@ class NotableSpritesObserver(StateObserver):
     """
     def __init__(self, game, notable_sprites: Union[List, Dict] = None):
         super().__init__(game)
-        self.notable_sprites = notable_sprites or game.sprite_registry.groups()
+        self.notable_sprites = list(notable_sprites or game.sprite_registry.groups())
 
 
     def get_observation(self):
-        state = []
+        state = {'avatar': [('avatar.1.position', (-1, -1))], 'angry': [('angry.1.position', (-1, -1))]}
 
-        sprite_keys = list(self.notable_sprites)
+        sprite_keys = self.notable_sprites
         num_classes = len(sprite_keys)
         resource_types = self.game.domain.notable_resources
 
         for i, key in enumerate(sprite_keys):
+            if key[0] == 'floor' or key[0] == 'wall' or key[0] == 'A':
+                continue
             class_one_hot = [float(j==i) for j in range(num_classes)]
 
             # TODO this code is currently unsafe as getSprites does not
             # guarantee the same order for each call (Python < 3.6),
             # meaning observations will have inconsistent ordering of values
-            for s in self.game.get_sprites(key):
+            for s in key[1]:
+
                 position = self._rect_to_pos(s.rect)
-                if hasattr(s, 'orientation'):
-                    orientation = [float(a) for a in s.orientation]
-                else:
-                    orientation = [0.0, 0.0]
 
-                resources = [ float(s.resources[r]) for r in resource_types ]
-
-                state += [
+                state[key[0]] = [
                     (s.id + '.position', position),
-                    (s.id + '.orientation', orientation),
-                    (s.id + '.class', class_one_hot),
-                    (s.id + '.resources', resources),
                 ]
 
-        return KeyValueObservation(state)
+        return KeyValueObservation(state['angry'] + state['avatar'])

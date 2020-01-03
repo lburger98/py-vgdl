@@ -28,9 +28,8 @@ def cloneSprite(sprite, partner, game):
 
 def transformTo(sprite, partner, game, stype='wall'):
     from vgdl.ontology.sprites import OrientedSprite
-    # game.destroy_sprite(sprite)
-    game.kill_sprite(sprite)
-    new_sprite = game.create_sprite(stype, sprite.rect.topleft)
+    game.destroy_sprite(sprite)
+    new_sprite = game.create_sprite(stype, sprite.rect.topleft, sprite.id)
     assert new_sprite, 'This really was not supposed to happen, cannot recover'
     if isinstance(sprite, OrientedSprite) and isinstance(new_sprite, OrientedSprite):
         new_sprite.orientation = sprite.orientation
@@ -320,16 +319,6 @@ class AvatarCollectResource(Effect):
         # `this` is not necessarily the avatar
         avatar = game.sprite_registry.get_avatar()
         collectResource(resource, avatar, game)
-
-class TransformOthersTo(Effect):
-    def __init__(self, *args, **kwargs):
-        self.target = kwargs.pop('target')
-        self.stype = kwargs.pop('stype')
-        super().__init__(*args, **kwargs)
-
-    def __call__(self, this, that, game):
-        for sprite in game.sprite_registry.with_stype(self.target):
-            transformTo(sprite, that, game, stype=self.stype)
 
 class NullEffect(Effect):
     def __call__(self, this, that, game):

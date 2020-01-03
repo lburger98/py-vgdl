@@ -29,7 +29,8 @@ def register_vgdl_env(domain_file, level_file, observer=None, blocksize=None):
             'block_size': blocksize,
             'obs_type': observer or 'features',
         },
-        nondeterministic=True
+        # timestep_limit=10000,
+        # nondeterministic=True
     )
 
     return env_name
@@ -73,8 +74,8 @@ def main():
         args.domainfile = os.path.join(os.path.dirname(args.levelfile),
                                        os.path.basename(args.levelfile).split('_')[0] + '.txt')
 
-    env_name = register_vgdl_env(args.domainfile, args.levelfile, observer_cls,
-                                 args.blocksize)
+
+    env_name = register_vgdl_env(args.domainfile, args.levelfile, observer_cls, args.blocksize)
     # env_name = '.'.join(os.path.basename(args.levelfile).split('.')[:-1])
 
     logging.basicConfig(format='%(levelname)s:%(name)s %(message)s',

@@ -11,36 +11,32 @@ class AStarNode(object):
 
 class AStarWorld(object):
 
-	def __init__(self, game):
+	def __init__(self, game, speed):
 		self.game = game
 		#ghost_sprites = game.getSprites('ghost')
 		#pacman_sprite = game.getSprites('pacman')[0]
 
-		self.food = game.get_sprites('food')
-		self.nest = game.get_sprites('nest')
-		self.moving = game.get_sprites('moving')
-		self.empty = [VGDLSprite(pos, (self.game.block_size, self.game.block_size)) for pos in self.game.emptyBlocks()]
-
-		##print "food=%s, nest=%s, moving=%s" %(len(food), len(nest), len(moving))
-		##print "empty=%s"  %	(len(empty))
-		##print "total=%s" %(len(food)+len(nest)+len(moving)+len(empty))
-
-		##print "len(sprites)=%s" %len(sprites)
-		#print "game.width=%s, game.height=%s" %(game.width, game.height)
-		#print "pacman_sprite=%s" %(pacman_sprite)
-		#print "x=%s, y=%s" %(pacman_sprite.rect.left/game.block_size, pacman_sprite.rect.top/game.block_size)
+		moving_types = [i for i in game.sprite_registry.sprite_keys if i not in ['wall', 'floor']]
+		moving = []
+		for mtype in moving_types:
+			moving += game.get_sprites(mtype)
+		self.moving = moving
+		self.empty = game.get_sprites('floor')
+		self.speed = speed
+		self.walls = game.get_sprites('wall')
 
 		self.save_walkable_tiles()
 
 	def get_walkable_tiles(self):
-		return self.food + self.nest + self.moving + self.empty
+		return self.moving + self.empty
 
 	def save_walkable_tiles(self):
 
 		self.walkable_tiles = {}
 		self.walkable_tile_indices = []
+		self.wall_tile_indices = []
 
-		combined = self.food + self.nest + self.moving + self.empty
+		combined = self.moving + self.empty
 		#print combined
 		for sprite in combined:
 			#print sprite
@@ -48,6 +44,10 @@ class AStarWorld(object):
 			index = self.get_index(tileX, tileY)
 			self.walkable_tile_indices.append(index)
 			self.walkable_tiles[index] = AStarNode(index, sprite)
+		for wall in self.walls:
+			tileX, tileY = self.get_sprite_tile_position(wall)
+			index = self.get_index(tileX, tileY)
+			self.wall_tile_indices.append(index)
 
 
 
@@ -108,18 +108,25 @@ class AStarWorld(object):
 
 	def neighbor_nodes_of_sprite(self, sprite):
 		tileX, tileY = self.get_sprite_tile_position(sprite)
-
-		tiles = [ (tileX-1,tileY), (tileX+1, tileY), (tileX,tileY-1), (tileX, tileY+1)]
 		neighbors = []
-		for (tilex, tiley) in tiles:
-			if (tilex >= 0 and tilex < self.game.width and tiley >= 0 and tiley < self.game.height):
-				index = self.get_index(tilex, tiley)
-				if index in self.walkable_tile_indices:
-					neighbors.append(self.walkable_tiles[index])
+
+		tileSet = [[(tilex, tileY) for tilex in range(int(tileX+1), int(tileX+self.speed+1))]]
+		tileSet.append([(tilex, tileY) for tilex in range(int(tileX-1), int(tileX-self.speed-1), -1)])
+		tileSet.append([(tileX, tiley) for tiley in range(int(tileY+1), int(tileY+self.speed+1))])
+		tileSet.append([(tileX, tiley) for tiley in range(int(tileY-1), int(tileY-self.speed-1), -1)])
+
+		for tiles in tileSet:
+			for (tilex, tiley) in tiles:
+				tilex, tiley = float(tilex), float(tiley)
+				if (tilex >= 0 and tilex < self.game.width and tiley >= 0 and tiley < self.game.height):
+					index = self.get_index(tilex, tiley)
+					if index in self.wall_tile_indices:
+						break
+					else:
+						neighbors.append(self.walkable_tiles[index])
 
 		# neighbor_indices = [neighbor.index for neighbor in neighbors]
 		# print 'neighbors(%s,%s):%s' %(tileX, tileY, map(self.get_tile_from_index, neighbor_indices))
-
 		return neighbors
 
 	def distance(self, node1, node2):
@@ -128,15 +135,14 @@ class AStarWorld(object):
 
 		return abs(x2-x1) + abs(y2-y1)
 
-	def getMoveFor(self, startSprite):
+	def getMoveFor(self, startSprite, goal_sprite):
 		tileX, tileY = self.get_sprite_tile_position(startSprite)
 		index = self.get_index(tileX, tileY)
 		startNode = AStarNode(index, startSprite)
 
-		pacman = self.game.get_sprites('pacman')[0]
-		goalX, goalY = self.get_sprite_tile_position(pacman)
+		goalX, goalY = self.get_sprite_tile_position(goal_sprite)
 		goalIndex = self.get_index(goalX, goalY)
-		goalNode = AStarNode(goalIndex, pacman)
+		goalNode = AStarNode(goalIndex, goal_sprite)
 
 		return self.search(startNode, goalNode)
 

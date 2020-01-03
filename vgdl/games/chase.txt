@@ -1,20 +1,17 @@
 BasicGame
     SpriteSet
-        floor > Immovable hidden=True img=oryx/grass_0
-        carcass > Immovable color=BROWN img=oryx/worm2 shrinkfactor=0.6
+        floor > Immovable hidden=True img=oryx/backBiege
         goat > stype=avatar
-            angry  > Chaser  color=ORANGE img=oryx/bird3
-            scared > Fleeing color=BLUE img=oryx/bird1
-        avatar > MovingAvatar img=oryx/princess1
-        wall > Immovable img=oryx/tree2
+            angry  > MyChaser  color=ORANGE img=oryx/bird3
+            scared > MyFleeing color=BLUE img=oryx/bird1
+        avatar > MovingAvatar img=oryx/yeti1
+        wall > Immovable img=oryx/wall2
 
     InteractionSet
         goat   wall goat   > stepBack
         avatar wall    > stepBack
         avatar  angry  > killSprite scoreChange=-1
-        scared avatar  > transformTo stype=carcass scoreChange=1
-        scared carcass > transformTo stype=angry
-        carcass scared > killSprite
+        scared avatar  > killSprite scoreChange=1
 
     LevelMapping
         0 > scared floor

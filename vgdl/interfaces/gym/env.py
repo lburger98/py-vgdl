@@ -69,14 +69,13 @@ class VGDLEnv(gym.Env):
             self.observer = AvatarOrientedObserver(self.game)
             self.observation_space = spaces.Box(low=0, high=100,
                     shape=self.observer.observation_shape)
-        # elif isinstance(self._obs_type, type) and issubclass(self._obs_type, StateObserver):
+        elif isinstance(self._obs_type, type) and issubclass(self._obs_type, StateObserver):
+            self.observer = self._obs_type(self.game)
+            # TODO vgdl.StateObserver should report some space
+            self.observation_space = spaces.Box(low=0, high=100,
+                                        shape=self.observer.observation_shape)
         else:
-            try:
-                self.observer = self._obs_type(self.game)
-                self.observation_space = spaces.Box(low=0, high=100,
-                                            shape=self.observer.observation_shape)
-            except:
-                raise Exception('Unknown obs_type `{}`'.format(self._obs_type))
+            raise Exception('Unknown obs_type `{}`'.format(self._obs_type))
 
         # For rendering purposes, will be initialised by first `render` call
         self.renderer = None
@@ -98,20 +97,19 @@ class VGDLEnv(gym.Env):
         if self._obs_type == 'image':
             return self.renderer.get_image()
         else:
-            observation = self.observer.get_observation()
-            if hasattr(observation, 'as_array'):
-                return observation.as_array()
-            return observation
+            return self.observer.get_observation().as_array()
 
-    def step(self, a):
+    def step(self, avatar_action, angry_action=None):
         # if not self.mode_initialised:
         #     raise Exception('Please call `render` at least once for initialisation')
-        self.game.tick(self._action_keys[a])
+        self.game.tick(self._action_keys[avatar_action], angry_action)
         state = self._get_obs()
         reward = self.game.score - self.score_last
         self.score_last = self.game.score
         terminal = self.game.ended
-        return state, reward, terminal, {}
+        sprite = self.game.sprite_registry.group('angry')[0]
+
+        return state, reward, terminal, sprite
 
     def reset(self):
         # TODO improve the reset with the new domain split

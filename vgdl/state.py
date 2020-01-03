@@ -5,7 +5,6 @@ from vgdl.ontology import GridPhysics
 from vgdl.tools import PrettyDict
 
 import copy
-import numpy as np
 
 
 class Observation:
@@ -21,13 +20,14 @@ class KeyValueObservation(PrettyDict, OrderedDict, Observation):
     """
 
     def as_array(self):
-        return np.array(list(self.values()))
+        import numpy as np
+        return np.hstack(list(self.values()))
 
     def as_dict(self):
         return self
 
     def __iter__(self):
-        for el in self.values():
+        for el in self.as_array():
             yield el
 
     def __hash__(self):
@@ -41,7 +41,7 @@ class KeyValueObservation(PrettyDict, OrderedDict, Observation):
 
 class StateObserver:
     def __init__(self, game: BasicGame) -> None:
-        self.set_game(game)
+        self.game = game
 
 #     @property
 #     def game(self):
